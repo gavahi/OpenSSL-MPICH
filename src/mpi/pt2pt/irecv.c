@@ -6,9 +6,7 @@
  */
 
 #include "mpiimpl.h"
-// added by abu naser 
-//char Ideciphertext[3000][4194304+18];
-unsigned char Ideciphertext[5000][500000];
+unsigned char Ideciphertext[3000][1100000];
 unsigned char * bufptr[100000];
 int reqCounter = 0;
 // end
@@ -164,6 +162,7 @@ int MPI_Irecv(void *buf, int count, MPI_Datatype datatype, int source,
     goto fn_exit;
     /* --END ERROR HANDLING-- */
 }
+
 /* This implementation is for variable nonce */
 int MPI_SEC_Irecv(void *buf, int count, MPI_Datatype datatype, int source, int tag, MPI_Comm comm, MPI_Request *request)
 {
@@ -191,7 +190,7 @@ int MPI_SEC_Irecv(void *buf, int count, MPI_Datatype datatype, int source, int t
     * request = req;
     bufptr[reqCounter]=buf;
     reqCounter++;
-    if(reqCounter == (5000-1))
+    if(reqCounter == (3000-1))
         reqCounter=0;
 
 #if 0

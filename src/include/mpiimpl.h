@@ -18,6 +18,8 @@
 #include <openssl/aes.h>
 #include <openssl/err.h>
 #include <openssl/bio.h>
+ #include <openssl/rand.h>
+
 //#include <openssl/aead.h>
 //extern EVP_AEAD_CTX *ctx;
 extern unsigned int outlen_enc;
@@ -27,7 +29,7 @@ extern int outlen_dec_org;
 extern EVP_CIPHER_CTX *ctx_enc;
 extern EVP_CIPHER_CTX *ctx_dec;
 
-extern unsigned char Ideciphertext[5000][500000];
+extern unsigned char Ideciphertext[3000][1100000];
 extern unsigned char * bufptr[100000];
 
 // to handle irecv

@@ -6,11 +6,9 @@
  */
 
 #include "mpiimpl.h"
-// added by abu naser
-
-unsigned char Iciphertext[5000][500000];
+unsigned char Iciphertext[3000][1100000];
 int isendCounter = 0;
-//end of add
+
 
 /* -- Begin Profiling Symbol Block for routine MPI_Isend */
 #if defined(HAVE_PRAGMA_WEAK)
@@ -159,6 +157,7 @@ int MPI_Isend(const void *buf, int count, MPI_Datatype datatype, int dest, int t
     /* --END ERROR HANDLING-- */
 }
 
+
 /* This implementation is for variable nonce */
 int MPI_SEC_Isend(const void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI_Comm comm, MPI_Request *request)
 {
@@ -167,14 +166,9 @@ int MPI_SEC_Isend(const void *buf, int count, MPI_Datatype datatype, int dest, i
     MPI_Request req;
     int  sendtype_sz=0;           
     MPI_Type_size(datatype, &sendtype_sz); 
-	//const unsigned char gcm_key[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
-	//const unsigned char gcm_iv[] = {0,0,0,0,0,0,0,0,0,0,0,0}; 
 		
 	//MPI_Request request[10000];
 	//MPI_Status status_local[10000];
-
-	//OpenSSL_add_all_algorithms();
-	//ERR_load_crypto_strings();
 			
 	char * ciphertext;
 	//int sendtype_sz;
@@ -186,27 +180,21 @@ int MPI_SEC_Isend(const void *buf, int count, MPI_Datatype datatype, int dest, i
 
 	
 
-/*nonceCounter++;
-memset(&Iciphertext[isendCounter][0], 0, 8);
-Iciphertext[isendCounter][8] = (nonceCounter >> 24) & 0xFF;
-Iciphertext[isendCounter][9] = (nonceCounter >> 16) & 0xFF;
-Iciphertext[isendCounter][10] = (nonceCounter >> 8) & 0xFF;
-Iciphertext[isendCounter][11] = nonceCounter & 0xFF;*/
-
-openssl_enc_core(&Iciphertext[isendCounter][0],0,buf,0,blocktype_send);
+    openssl_enc_core(&Iciphertext[isendCounter][0],0,buf,0,blocktype_send);
 
 /*int var = crypto_aead_aes256gcm_encrypt_afternm(&Iciphertext[isendCounter][12],&ciphertext_len,
             buf, count*sendtype_sz,
             NULL, 0,
             NULL, &Iciphertext[isendCounter][0], (const crypto_aead_aes256gcm_state *) &ctx);*/
 
-mpi_errno=MPI_Isend(&Iciphertext[isendCounter][0], (blocktype_send+16+12), MPI_CHAR, dest, tag, comm, &req);
-* request = req;
-isendCounter++;
+    mpi_errno=MPI_Isend(&Iciphertext[isendCounter][0], (blocktype_send+16+12), MPI_CHAR, dest, tag, comm, &req);
+    * request = req;
+    isendCounter++;
 
-if(isendCounter == (5000-1))
-    isendCounter=0;
+    if(isendCounter == (3000-1))
+        isendCounter=0;
 
-return mpi_errno;
+    return mpi_errno;
 }
 
+/* End of adding abu naser */

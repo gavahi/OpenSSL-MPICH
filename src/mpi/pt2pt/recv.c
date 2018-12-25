@@ -7,7 +7,6 @@
 
 #include "mpiimpl.h"
 unsigned char ciphertext_recv[4194304+400];
-
 int outlen_dec;
 int outlen_dec_org;
 EVP_CIPHER_CTX *ctx_dec;
@@ -310,8 +309,8 @@ void openssl_dec_core(unsigned char * ciphertext_recv, unsigned long long src, c
 	//strncpy(gcm_iv, ciphertext_recv, 12);//????
 	
 	
-	EVP_DecryptInit_ex(ctx_dec, NULL, NULL, gcm_key, ciphertext_recv);		
-	//EVP_DecryptUpdate(ctx_dec, recvbuf+dest, &outlen_dec, ciphertext_recv+src, (blocktype_recv));
+	EVP_DecryptInit_ex(ctx_dec, NULL, NULL, gcm_key, ciphertext_recv+src);		
+	//EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext, ciphertext_len))
 	EVP_DecryptUpdate(ctx_dec, recvbuf+dest, &outlen_dec, ciphertext_recv+12+src, (blocktype_recv-12));		
 	//EVP_CIPHER_CTX_ctrl(ctx_dec, EVP_CTRL_AEAD_SET_TAG, 16,(ciphertext_recv+src+blocktype_recv));
 	/* EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, 16, tag)*/		

@@ -20,7 +20,6 @@
 #include "mpiimpl.h"
 
 unsigned int outlen_enc;
-// int outlen_enc_org;
 EVP_CIPHER_CTX *ctx_enc;
 int nonceCounter=0;
 unsigned char send_ciphertext[4194304+400];
@@ -342,26 +341,20 @@ int MPI_SEC_Send(const void *buf, int count, MPI_Datatype datatype, int dest, in
 
 
 void init_openssl_128(){
-   // unsigned char key_boringssl_16 [16] = {'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p'};
-    //ctx = EVP_AEAD_CTX_new(EVP_aead_aes_128_gcm(),key,16, 0);
+
 	ctx_enc = EVP_CIPHER_CTX_new();
 	EVP_EncryptInit_ex(ctx_enc, EVP_aes_128_gcm(), NULL, NULL, NULL);
 	ctx_dec = EVP_CIPHER_CTX_new();
 	EVP_DecryptInit_ex(ctx_dec, EVP_aes_128_gcm(), NULL, NULL, NULL);
-	//enc_init();
-	//dec_init();
     return;                        
 }
 
 void init_openssl_256(){unsigned char send_ciphertext[4194304+18];
-   // unsigned char key_boringssl_16 [16] = {'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p'};
-    //ctx = EVP_AEAD_CTX_new(EVP_aead_aes_128_gcm(),key,16, 0);
+
 	ctx_enc = EVP_CIPHER_CTX_new();
 	EVP_EncryptInit_ex(ctx_enc, EVP_aes_256_gcm(), NULL, NULL, NULL);
 	ctx_dec = EVP_CIPHER_CTX_new();
 	EVP_DecryptInit_ex(ctx_dec, EVP_aes_256_gcm(), NULL, NULL, NULL);
-	//enc_init();
-	//dec_init();
     return;                        
 }
 
@@ -370,24 +363,42 @@ void init_openssl_256(){unsigned char send_ciphertext[4194304+18];
 void openssl_enc_core(unsigned char *send_ciphertext , unsigned long long src,const void *sendbuf, unsigned long long dest, unsigned long long blocktype_send){	
 	const unsigned char gcm_key[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 	//unsigned char gcm_iv[] = {0,0,0,0,0,0,0,0,0,0,0,0};
+    //src: already sent cipher length, dest: already sent message length
+	
+	//unsigned char n[14];
+	int rc = RAND_bytes(send_ciphertext+src, 12);
+	//unsigned long err = ERR_get_error();
 
-	nonceCounter++;
-	memset(send_ciphertext, 0, 8);
-	send_ciphertext[8] = (nonceCounter >> 24) & 0xFF;
-	send_ciphertext[9] = (nonceCounter >> 16) & 0xFF;
-	send_ciphertext[10] = (nonceCounter >> 8) & 0xFF;
-	send_ciphertext[11] = nonceCounter & 0xFF;
-	//strncpy(gcm_iv, send_ciphertext, 12);
+if(rc != 1) {
+    /* RAND_bytes failed */
+    /* `err` is valid    */
+	printf("Nonce did not generated\n");
+}
 
-	int world_rank;
-	static int first_enc=1;
+  //printf("%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n",
+    //    send_ciphertext[0],send_ciphertext[1],send_ciphertext[2],send_ciphertext[3],send_ciphertext[4],
+	//	send_ciphertext[5],send_ciphertext[6],send_ciphertext[7],send_ciphertext[8],send_ciphertext[9],
+	//	send_ciphertext[10],send_ciphertext[11]);
+
+	/*nonceCounter++;
+	memset(&send_ciphertext[src], 0, 8);
+	send_ciphertext[src + 8] = (nonceCounter >> 24) & 0xFF;
+	send_ciphertext[src + 9] = (nonceCounter >> 16) & 0xFF;
+	send_ciphertext[src + 10] = (nonceCounter >> 8) & 0xFF;
+	send_ciphertext[src+ 11] = nonceCounter & 0xFF;*/
+	
+/* OK to proceed */
+
+	//int world_rank;
+	//static int first_enc=1;
 	
 	
-	EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, send_ciphertext);
+	EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, send_ciphertext+src);
 	//EVP_EncryptUpdate(ctx, ciphertext, &len, plaintext, plaintext_len))
 	
 	//EVP_EncryptUpdate(ctx_enc, ciphertext_send+src, &outlen_enc, sendbuf+dest, blocktype_send);
-	EVP_EncryptUpdate(ctx_enc, send_ciphertext+12+src, &outlen_enc, sendbuf+dest, blocktype_send);
+	//src: already sent cipher length, dest: already sent message length
+	EVP_EncryptUpdate(ctx_enc, send_ciphertext+src+12, &outlen_enc, sendbuf+dest, blocktype_send);
 
 	//EVP_EncryptFinal_ex(ctx_enc, ciphertext_send+src+outlen_enc, &outlen_enc);
 	EVP_EncryptFinal_ex(ctx_enc, send_ciphertext+12+src+outlen_enc, &outlen_enc);
@@ -406,15 +417,6 @@ int MPI_SEC_Send(const void *buf, int count, MPI_Datatype datatype, int dest, in
 	int world_rank;
 	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 	int i=0;
-	
-	//const unsigned char gcm_key[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
-	//const unsigned char gcm_iv[] = {0,0,0,0,0,0,0,0,0,0,0,0}; 
-		
-	//MPI_Request request[10000];
-	//MPI_Status status_local[10000];
-
-	//OpenSSL_add_all_algorithms();
-	//ERR_load_crypto_strings();
 			
 	char * ciphertext;
 	int sendtype_sz;
@@ -423,52 +425,13 @@ int MPI_SEC_Send(const void *buf, int count, MPI_Datatype datatype, int dest, in
     	
 	unsigned long long blocktype_send= (unsigned long long) sendtype_sz*count;
 	
-	// if (count > max_pack) {
-		
-		// int temp_count=count/max_pack;
-		
-		// ciphertext=(char*) MPIU_Malloc(((temp_count*(max_pack+32)) * sizeof(datatype)) );
-				
-		// for (i=0; i<temp_count; i++){
-			
-			// EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, gcm_iv);			
-			// EVP_EncryptUpdate(ctx_enc, ciphertext+i*(max_pack+32), &outlen_enc, buf+i*max_pack, max_pack);
-			// EVP_EncryptFinal_ex(ctx_enc, ciphertext+i*(max_pack+32), &outlen_enc);
-			// EVP_CIPHER_CTX_ctrl(ctx_enc, EVP_CTRL_AEAD_GET_TAG, 16, (ciphertext+i*(max_pack+32)+max_pack));
-			
-			// mpi_errno=MPI_Isend(ciphertext+i*(max_pack+32),max_pack+16, datatype, dest, tag, comm, &request[i]);
-			
-		// }
-		
-		// MPI_Waitall(temp_count,request, status_local);
-	// }
-	// else {
-		
-		// ciphertext=(char*) MPIU_Malloc(((count+32) * sizeof(datatype)) );
-		
-		// EVP_EncryptUpdate(ctx_enc, ciphertext, &outlen_enc, buf, count);
-		// EVP_EncryptFinal_ex(ctx_enc, ciphertext, &outlen_enc);
-		// EVP_CIPHER_CTX_ctrl(ctx_enc, EVP_CTRL_AEAD_GET_TAG, 16, (ciphertext+count));
-		
-		// mpi_errno=MPI_Send(ciphertext,count+16, datatype, dest, tag, comm);
-	// }
 	
-	
-	//ciphertext=(char*) MPIU_Malloc((32) + blocktype_send );
 	openssl_enc_core(send_ciphertext,0,buf,0,blocktype_send);
-	
-	// printf("\nciphertext @ sender in Process rank %d:\n",world_rank);
+		
     // BIO_dump_fp(stdout, ciphertext, count+16);
 	
 	//with IV size 12, tag size 16
 	mpi_errno=MPI_Send(send_ciphertext,blocktype_send+16+12, MPI_CHAR, dest, tag, comm);
-	
-
-	
-	
-	//printf("SEND3 count=%d \n",count);
-	
-	//MPIU_Free(ciphertext);
 
 	return mpi_errno;
 }
