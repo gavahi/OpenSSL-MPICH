@@ -365,8 +365,29 @@ make[2]: Entering directory '/home/mpiuser/openssl-mpich-3.2.1'
   CC       src/mpi/coll/lib_libmpi_la-op_create.lo
   CC       src/mpi/coll/lib_libmpi_la-op_free.lo
   CC       src/mpi/coll/lib_libmpi_la-bcast.lo
+src/mpi/coll/bcast.c: In function ‘MPI_SEC_Bcast’:
+src/mpi/coll/bcast.c:1706:3: warning: implicit declaration of function ‘openssl_enc_core’ [-Wimplicit-function-declaration]
+   openssl_enc_core(ciphertext,0,buffer,0,blocktype);
+   ^
+src/mpi/coll/bcast.c:1721:3: warning: implicit declaration of function ‘openssl_dec_core’ [-Wimplicit-function-declaration]
+   openssl_dec_core(ciphertext,0,buffer,0,blocktype+12);
+   ^
   CC       src/mpi/coll/lib_libmpi_la-alltoall.lo
+src/mpi/coll/alltoall.c: In function ‘MPI_SEC_Alltoall’:
+src/mpi/coll/alltoall.c:845:3: warning: implicit declaration of function ‘openssl_enc_core’ [-Wimplicit-function-declaration]
+   openssl_enc_core(ciphertext_send,src,sendbuf,dest,blocktype_send);
+   ^
+src/mpi/coll/alltoall.c:856:3: warning: implicit declaration of function ‘openssl_dec_core’ [-Wimplicit-function-declaration]
+   openssl_dec_core(ciphertext_recv,src,recvbuf,dest,blocktype_recv+12); 
+   ^
   CC       src/mpi/coll/lib_libmpi_la-alltoallv.lo
+src/mpi/coll/alltoallv.c: In function ‘MPI_SEC_Alltoallv’:
+src/mpi/coll/alltoallv.c:701:9: warning: implicit declaration of function ‘openssl_enc_core’ [-Wimplicit-function-declaration]
+         openssl_enc_core(alltoallv_ciphertext_sendbuf,send_index,sendbuf,next,blocktype_send);
+         ^
+src/mpi/coll/alltoallv.c:727:3: warning: implicit declaration of function ‘openssl_dec_core’ [-Wimplicit-function-declaration]
+   openssl_dec_core(alltoallv_ciphertext_recvbuf,next,recvbuf,dest,((unsigned long long)cipher_recvcounts[k]-16));
+   ^
   CC       src/mpi/coll/lib_libmpi_la-reduce.lo
   CC       src/mpi/coll/lib_libmpi_la-scatter.lo
   CC       src/mpi/coll/lib_libmpi_la-gather.lo
@@ -375,6 +396,13 @@ make[2]: Entering directory '/home/mpiuser/openssl-mpich-3.2.1'
   CC       src/mpi/coll/lib_libmpi_la-scan.lo
   CC       src/mpi/coll/lib_libmpi_la-exscan.lo
   CC       src/mpi/coll/lib_libmpi_la-allgather.lo
+src/mpi/coll/allgather.c: In function ‘MPI_SEC_Allgather’:
+src/mpi/coll/allgather.c:1120:5: warning: implicit declaration of function ‘openssl_enc_core’ [-Wimplicit-function-declaration]
+     openssl_enc_core(ciphertext_send,0,sendbuf,0,blocktype_send);
+     ^
+src/mpi/coll/allgather.c:1129:9: warning: implicit declaration of function ‘openssl_dec_core’ [-Wimplicit-function-declaration]
+         openssl_dec_core(ciphertext_recv,src,recvbuf,dest,blocktype_recv+12);
+         ^
   CC       src/mpi/coll/lib_libmpi_la-allgatherv.lo
   CC       src/mpi/coll/lib_libmpi_la-red_scat.lo
   CC       src/mpi/coll/lib_libmpi_la-alltoallw.lo
@@ -539,16 +567,16 @@ make[2]: Entering directory '/home/mpiuser/openssl-mpich-3.2.1'
   CC       src/mpi/pt2pt/lib_libmpi_la-irsend.lo
   CC       src/mpi/pt2pt/lib_libmpi_la-isend.lo
 src/mpi/pt2pt/isend.c: In function ‘MPI_SEC_Isend’:
-src/mpi/pt2pt/isend.c:196:1: warning: implicit declaration of function ‘openssl_enc_core’ [-Wimplicit-function-declaration]
- openssl_enc_core(&Iciphertext[isendCounter][0],0,buf,0,blocktype_send);
- ^
+src/mpi/pt2pt/isend.c:183:5: warning: implicit declaration of function ‘openssl_enc_core’ [-Wimplicit-function-declaration]
+     openssl_enc_core(&Iciphertext[isendCounter][0],0,buf,0,blocktype_send);
+     ^
   CC       src/mpi/pt2pt/lib_libmpi_la-issend.lo
   CC       src/mpi/pt2pt/lib_libmpi_la-mprobe.lo
   CC       src/mpi/pt2pt/lib_libmpi_la-mrecv.lo
   CC       src/mpi/pt2pt/lib_libmpi_la-probe.lo
   CC       src/mpi/pt2pt/lib_libmpi_la-recv.lo
 src/mpi/pt2pt/recv.c: In function ‘openssl_dec_core’:
-src/mpi/pt2pt/recv.c:315:29: warning: passing argument 2 of ‘EVP_DecryptUpdate’ discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+src/mpi/pt2pt/recv.c:314:29: warning: passing argument 2 of ‘EVP_DecryptUpdate’ discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
   EVP_DecryptUpdate(ctx_dec, recvbuf+dest, &outlen_dec, ciphertext_recv+12+src, (blocktype_recv-12));  
                              ^
 In file included from ./src/include/mpiimpl.h:17:0,
@@ -556,7 +584,7 @@ In file included from ./src/include/mpiimpl.h:17:0,
 /home/mpiuser/openssl-1.1.1-pre8/include/openssl/evp.h:593:16: note: expected ‘unsigned char *’ but argument is of type ‘const void *’
  /*__owur*/ int EVP_DecryptUpdate(EVP_CIPHER_CTX *ctx, unsigned char *out,
                 ^
-src/mpi/pt2pt/recv.c:320:37: warning: passing argument 2 of ‘EVP_DecryptFinal_ex’ discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+src/mpi/pt2pt/recv.c:319:37: warning: passing argument 2 of ‘EVP_DecryptFinal_ex’ discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
   if (!(EVP_DecryptFinal_ex(ctx_dec, (recvbuf+dest+outlen_dec), &outlen_dec) > 0)) printf("Tag Verify Failed!\n");
                                      ^
 In file included from ./src/include/mpiimpl.h:17:0,
@@ -586,9 +614,13 @@ In file included from ./src/include/mpiimpl.h:17:0,
   CC       src/mpi/pt2pt/lib_libmpi_la-wait.lo
 src/mpi/pt2pt/wait.c: In function ‘MPI_SEC_Wait’:
 src/mpi/pt2pt/wait.c:228:5: warning: implicit declaration of function ‘openssl_dec_core’ [-Wimplicit-function-declaration]
-     openssl_dec_core(Ideciphertext[waitCounter][0],0,bufptr[waitCounter],0,recv_sz-16);
+     openssl_dec_core(&Ideciphertext[waitCounter][0],0,&bufptr[waitCounter],0,recv_sz-16);
      ^
   CC       src/mpi/pt2pt/lib_libmpi_la-waitall.lo
+src/mpi/pt2pt/waitall.c: In function ‘MPI_SEC_Waitall’:
+src/mpi/pt2pt/waitall.c:419:5: warning: implicit declaration of function ‘openssl_dec_core’ [-Wimplicit-function-declaration]
+     openssl_dec_core(Ideciphertext[waitCounter][0],0,bufptr[waitCounter],0,recv_sz-16);
+     ^
   CC       src/mpi/pt2pt/lib_libmpi_la-waitany.lo
   CC       src/mpi/pt2pt/lib_libmpi_la-waitsome.lo
   CC       src/mpi/rma/lib_libmpi_la-accumulate.lo

@@ -129,7 +129,7 @@ libtool: install: ranlib /home/mpiuser/openssl-mpich-3.2.1/mpich-install/lib/lib
 libtool: install: /usr/bin/install -c lib/.libs/libmpicxx.a /home/mpiuser/openssl-mpich-3.2.1/mpich-install/lib/libmpicxx.a
 libtool: install: chmod 644 /home/mpiuser/openssl-mpich-3.2.1/mpich-install/lib/libmpicxx.a
 libtool: install: ranlib /home/mpiuser/openssl-mpich-3.2.1/mpich-install/lib/libmpicxx.a
-libtool: finish: PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/sbin" ldconfig -n /home/mpiuser/openssl-mpich-3.2.1/mpich-install/lib
+libtool: finish: PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/sbin" ldconfig -n /home/mpiuser/openssl-mpich-3.2.1/mpich-install/lib
 ----------------------------------------------------------------------
 Libraries have been installed in:
    /home/mpiuser/openssl-mpich-3.2.1/mpich-install/lib
