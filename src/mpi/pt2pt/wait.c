@@ -225,7 +225,7 @@ int MPI_SEC_Wait(MPI_Request *request, MPI_Status *status){
     MPI_Datatype datatype = MPI_CHAR;
     MPI_Get_count(status, datatype, &recv_sz);
     //var = openssl_dec_core(ciphertext,0,buf,0,blocktype_recv);
-    openssl_dec_core(&Ideciphertext[waitCounter][0],0,&bufptr[waitCounter],0,recv_sz-16);
+    openssl_dec_core(&Ideciphertext[waitCounter][0],0,bufptr[waitCounter],0,recv_sz-16);
      /*var = crypto_aead_aes256gcm_decrypt_afternm(bufptr[waitCounter], &count,
                                   NULL,
                                   &Ideciphertext[waitCounter][12], (unsigned long)(recv_sz-12),

@@ -10,7 +10,10 @@ unsigned char ciphertext_recv[4194304+400];
 int outlen_dec;
 int outlen_dec_org;
 EVP_CIPHER_CTX *ctx_dec;
+unsigned char Recv_IV[1024][16],dec_iv[1024][16], dec_calculator[1024][8000];
 
+int dec_start[1024], dec_end[1024],dec_flag[1024],dec_amount;
+int dec_counter[1024];
 
 
 /* -- Begin Profiling Symbol Block for routine MPI_Recv */
@@ -304,8 +307,8 @@ int MPI_SEC_Recv(void *buf, int count, MPI_Datatype datatype, int source, int ta
 
 void openssl_dec_core(unsigned char * ciphertext_recv, unsigned long long src, const void *recvbuf, unsigned long long dest, unsigned long long blocktype_recv){
 	
-	const unsigned char gcm_key[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
-	//unsigned char gcm_iv[] = {0,0,0,0,0,0,0,0,0,0,0,0};
+	
+	unsigned char gcm_key[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 	//strncpy(gcm_iv, ciphertext_recv, 12);//????
 	
 	
@@ -322,7 +325,7 @@ void openssl_dec_core(unsigned char * ciphertext_recv, unsigned long long src, c
 int MPI_SEC_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, MPI_Comm comm, MPI_Status *status , int max_pack)
 {    
 	
-	const unsigned char gcm_key[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+	unsigned char gcm_key[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 	//unsigned char gcm_iv[] = {0,0,0,0,0,0,0,0,0,0,0,0}; 	
 	int i;
 	int recvtype_sz;
@@ -384,4 +387,206 @@ int MPI_SEC_Recv(void *buf, int count, MPI_Datatype datatype, int source, int ta
 	//MPIU_Free(ciphertext_recv);
 	
 	return mpi_errno;
+}
+
+
+int MPI_CTR_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, MPI_Comm comm, MPI_Status *status , int max_pack)
+{    
+	const unsigned char gcm_key[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+
+	int i;
+	int recvtype_sz;
+	MPI_Type_size(datatype, &recvtype_sz);
+	unsigned long long blocktype_recv= (unsigned long long) recvtype_sz*count;
+	
+	//unsigned char * ciphertext_recv;
+	unsigned long long next, src;
+	
+	int mpi_errno = MPI_SUCCESS;
+	
+	mpi_errno=MPI_Recv(ciphertext_recv, blocktype_recv+16, MPI_CHAR, source, tag, comm,status);
+	
+	// printf("Ciphertext @ Receiver:\n");
+	// BIO_dump_fp(stdout, ciphertext, count+16);
+	
+	EVP_DecryptInit_ex(ctx_dec, NULL, NULL, gcm_key, ciphertext_recv);	
+	EVP_DecryptUpdate(ctx_dec, buf, &outlen_dec, ciphertext_recv+16, blocktype_recv);
+	
+	//MPIU_Free(ciphertext_recv);
+	
+	return mpi_errno;
+}
+
+
+# if 0
+int MPI_PreCtr_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, MPI_Comm comm, MPI_Status *status , int max_pack)
+{    
+	
+	const unsigned char gcm_key[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+	
+	int i;
+	int recvtype_sz;
+	MPI_Type_size(datatype, &recvtype_sz);
+	unsigned long long blocktype_recv= (unsigned long long) recvtype_sz*count;
+	
+	//unsigned char * ciphertext_recv;
+	unsigned long long next, src;
+	
+	int mpi_errno = MPI_SUCCESS;
+	
+	mpi_errno=MPI_Recv(ciphertext_recv, blocktype_recv+12, MPI_CHAR, source, tag, comm,status);
+	
+	// printf("Ciphertext @ Receiver:\n");
+	// BIO_dump_fp(stdout, ciphertext, count+16);
+	
+	
+	EVP_DecryptInit_ex(ctx_dec, NULL, NULL, gcm_key, ciphertext_recv);	
+	EVP_DecryptUpdate(ctx_dec, buf, &outlen_dec, ciphertext_recv+12, blocktype_recv);
+	
+	//MPIU_Free(ciphertext_recv);
+	
+	return mpi_errno;
+}
+
+
+
+int MPI_PreCtr_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, MPI_Comm comm, MPI_Status *status , int max_pack)
+{    
+	
+	const unsigned char gcm_key[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+	
+	int i=0,len,segments_no,datasize,next,src;
+	int recvtype_sz;
+	int mpi_errno = MPI_SUCCESS;
+	MPI_Type_size(datatype, &recvtype_sz);
+	int blocktype_recv=  recvtype_sz*count;
+
+    segments_no = ( (blocktype_recv-1)/sct_sz ) +1;
+	mpi_errno = MPI_Recv(ciphertext_recv, blocktype_recv+(16*segments_no), MPI_CHAR, source, tag, comm, status);
+
+	for(i=0; i < segments_no; i++){
+        if( i != segments_no-1 ){
+            datasize = sct_sz+16;
+        }else{
+            datasize = blocktype_recv-((segments_no-1)*sct_sz) + 16;    
+        }	
+
+		//sct_sz+16=32 
+		next = i*sct_sz;
+		src = i*(sct_sz+16);
+		EVP_DecryptInit_ex(ctx_dec, NULL, NULL, gcm_key, ciphertext_recv+src);
+		//EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext, ciphertext_len))
+		EVP_DecryptUpdate(ctx_dec, buf+next, &outlen_dec, ciphertext_recv+16+src, datasize);
+	}
+
+	return mpi_errno;
+}
+# endif
+
+
+int MPI_PreCtr_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, MPI_Comm comm, MPI_Status *status , int max_pack)
+{    
+	const unsigned char gcm_key[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+	
+	int i,len;
+	int recvtype_sz,segments,dec_fin,dec_begin;
+	unsigned char ch;
+	MPI_Type_size(datatype, &recvtype_sz);
+	unsigned long long blocktype_recv= (unsigned long long) recvtype_sz*count;
+	
+	if (blocktype_recv > 8000){
+			printf("\nError: message size must < 8 K !!!\n");
+			return 1;
+	}
+	int mpi_errno = MPI_SUCCESS;
+	
+   if (dec_flag[source]==1){
+	   mpi_errno=MPI_Recv(ciphertext_recv, blocktype_recv+16, MPI_CHAR, source, tag, comm,status);
+	   memcpy(&Recv_IV[source][0],ciphertext_recv,16);
+
+	   if (blocktype_recv <=1024){
+		   EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, &Recv_IV[source][0]);
+	       EVP_EncryptUpdate(ctx_enc, &dec_calculator[source][0], &len, p, 1024);
+		   dec_counter[source] = 64;
+		   dec_start[source] = 0;
+		   dec_end [source]= 1024;
+		}else{
+		   segments =((blocktype_recv-1)/16)*16+16;//upper integer multi of 16
+		   EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, &Recv_IV[source][0]);
+		   EVP_EncryptUpdate(ctx_enc, &dec_calculator[source][0], &len, p, segments); 
+		   dec_counter[source] = (segments/16); //upper integer
+		   dec_end[source]= segments;
+		   dec_start[source] = 0;
+		}
+	  
+	  //Decryption
+	   for(i=0; i< blocktype_recv; i++){
+		   *((char *)(buf+i)) = (char )(dec_calculator[source][i] ^ (ciphertext_recv[i+16]));
+		   //memcpy(buf+i, &ch, 1);
+	   }
+	   dec_flag[source] =0;
+	   dec_start[source] = blocktype_recv;
+
+	}else{
+		dec_end[source] = (16*dec_counter[source])%8000;
+		dec_amount= dec_end[source] - dec_start[source];
+
+		if (blocktype_recv >= 8000-dec_start[source]){
+			//Restart from beginning && Make sure dec_end Always= 16*N
+			memcpy(&dec_iv[source][0],&Recv_IV[source][0],16);
+		    IV_Count(&dec_iv[source][0],dec_counter[source]);
+			segments=((blocktype_recv-1)/16)*16+16;	//upper integer
+			EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, &dec_iv[source][0]);
+			EVP_EncryptUpdate(ctx_enc, &dec_calculator[source][0], &len, p, segments);
+			dec_counter[source] += (segments/16);
+			dec_start[source] = 0;
+			dec_end[source]= segments;
+		}else if(blocktype_recv > dec_amount){
+			//Add more dec-ctr blocks
+			memcpy(&dec_iv[source][0],&Recv_IV[source][0],16);
+		    IV_Count(&dec_iv[source][0],dec_counter[source]);
+			segments =((blocktype_recv-dec_amount-1)/16)*16+16;
+			dec_fin = dec_end[source];
+			EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, &dec_iv[0][0]);
+			EVP_EncryptUpdate(ctx_enc, &dec_calculator[source][dec_fin], &len, p, segments); 
+			dec_counter[source] += (segments/16); //upper integer
+			dec_end[source] += segments;
+		}
+
+	   //Decryption	
+	   mpi_errno=MPI_Recv(ciphertext_recv, blocktype_recv, MPI_CHAR, source, tag, comm,status);
+	   dec_begin =dec_start[source];
+	   for(i=0; i< blocktype_recv; i++){
+		   *((char *)(buf+i)) = (char )(dec_calculator[source][dec_begin+i] ^ (ciphertext_recv[i]));
+		   //memcpy(buf+i, &ch, 1);
+	   }
+	   dec_start[source] += blocktype_recv; 
+	}
+
+	dec_amount= dec_end[source] - dec_start[source];
+	if(dec_amount<128 && dec_start[source] <4000){
+		memcpy(&dec_iv[source][0],&Recv_IV[source][0],16);
+		IV_Count(&dec_iv[source][0],dec_counter[source]);
+		if(dec_end[source]+128>8000){
+			//Restart from beginning
+			EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, &dec_iv[source][0]);
+			EVP_EncryptUpdate(ctx_enc, &dec_calculator[source][0], &len, p, 1024);
+			dec_counter[source] += 64;
+			dec_start[source] = 0;
+		}else{
+			dec_fin = dec_end[source];
+			EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, &dec_iv[source][0]);
+			EVP_EncryptUpdate(ctx_enc, &dec_calculator[source][dec_fin], &len, p, 128);
+			dec_counter[source] += 8;
+
+			//printf("\n DEC! dec_calculator: %c %c %c %c %c %c %c %c  \n",
+            //dec_calculator[0][dec_end], dec_calculator[0][dec_end+1], dec_calculator[0][dec_end+2], dec_calculator[0][dec_end+4],
+            //dec_calculator[0][dec_end+5], dec_calculator[0][dec_end+6], dec_calculator[0][dec_end+7], dec_calculator[0][dec_end+8]);
+
+			dec_end[source] = (16*dec_counter[source])%8000;
+		}
+	}    
+
+	return mpi_errno;
+
 }

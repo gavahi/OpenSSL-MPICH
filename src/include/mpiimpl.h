@@ -39,6 +39,12 @@ extern int isendCounter;
 // to generate nonce
 extern int nonceCounter; 
 
+//pre-ctr mode
+extern unsigned char p[8020],  pre_calculator[1024][8000], dec_calculator[1024][8000];
+extern unsigned char IV[1024][16],Recv_IV[1024][16];
+extern int pre_start[1024], pre_end[1024], dec_start[1024], dec_end[1024], amount, dec_amount;
+extern int iv_counter[1024],dec_counter[1024],first_flag[1024],dec_flag[1024];
+
 
 #ifndef MPIIMPL_H_INCLUDED
 #define MPIIMPL_H_INCLUDED

@@ -614,7 +614,7 @@ In file included from ./src/include/mpiimpl.h:17:0,
   CC       src/mpi/pt2pt/lib_libmpi_la-wait.lo
 src/mpi/pt2pt/wait.c: In function ‘MPI_SEC_Wait’:
 src/mpi/pt2pt/wait.c:228:5: warning: implicit declaration of function ‘openssl_dec_core’ [-Wimplicit-function-declaration]
-     openssl_dec_core(&Ideciphertext[waitCounter][0],0,&bufptr[waitCounter],0,recv_sz-16);
+     openssl_dec_core(&Ideciphertext[waitCounter][0],0,bufptr[waitCounter],0,recv_sz-16);
      ^
   CC       src/mpi/pt2pt/lib_libmpi_la-waitall.lo
 src/mpi/pt2pt/waitall.c: In function ‘MPI_SEC_Waitall’:
