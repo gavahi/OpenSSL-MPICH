@@ -6,8 +6,12 @@
  */
 
 #include "mpiimpl.h"
-unsigned char Iciphertext[3000][1100000];
+unsigned char Iciphertext[500][1100000];
 int isendCounter = 0;
+
+//Pre-CTR Mode
+int enc_dest[1024], psend_counter;
+psend_counter=0;
 
 
 /* -- Begin Profiling Symbol Block for routine MPI_Isend */
@@ -164,7 +168,7 @@ int MPI_SEC_Isend(const void *buf, int count, MPI_Datatype datatype, int dest, i
     int mpi_errno = MPI_SUCCESS;
     unsigned long long ciphertext_len; 
     MPI_Request req;
-    int  sendtype_sz=0;           
+    int sendtype_sz=0;           
     MPI_Type_size(datatype, &sendtype_sz); 
 		
 	//MPI_Request request[10000];
@@ -178,8 +182,6 @@ int MPI_SEC_Isend(const void *buf, int count, MPI_Datatype datatype, int dest, i
 	unsigned long long blocktype_send= (unsigned long long) sendtype_sz*count;
     ciphertext=(char*) MPIU_Malloc((40) + blocktype_send );
 
-	
-
     openssl_enc_core(&Iciphertext[isendCounter][0],0,buf,0,blocktype_send);
 
 /*int var = crypto_aead_aes256gcm_encrypt_afternm(&Iciphertext[isendCounter][12],&ciphertext_len,
@@ -191,10 +193,130 @@ int MPI_SEC_Isend(const void *buf, int count, MPI_Datatype datatype, int dest, i
     * request = req;
     isendCounter++;
 
-    if(isendCounter == (3000-1))
+    if(isendCounter == (500-1))
         isendCounter=0;
 
     return mpi_errno;
 }
 
 /* End of adding abu naser */
+
+
+/* This implementation is for Pre-CTR Mode */
+int MPI_PreCtr_Isend(const void *buf, int count, MPI_Datatype datatype, int dest, int tag, 
+                     MPI_Comm comm, MPI_Request *request,MPI_Status *status)
+{
+    int mpi_errno = MPI_SUCCESS;
+	int i,len,segments,pre_fin,enc_start;		
+	int rmd, sendtype_sz;
+    MPI_Request req;
+    const unsigned char gcm_key[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+
+	enc_dest[psend_counter] = dest;
+
+	MPI_Type_size(datatype, &sendtype_sz);	
+	unsigned long long blocktype_send= (unsigned long long)sendtype_sz*count;
+	if (blocktype_send > 8192){
+			printf("\nError: message size must <= 8K!!!\n");
+			return 1;
+	}
+	//total pre-calcu bytes
+	amount= pre_end[dest] - pre_start[dest];
+
+	if (blocktype_send >= 66560-pre_start[dest]){
+		//Calculate with the rest of the Array
+		segments =66560-pre_end[dest];
+		if(segments !=0){
+			pre_fin = pre_end[dest]; 
+			memcpy(&enc_iv[dest][0],&IV[dest][0],16);
+			IV_Count(&enc_iv[dest][0],iv_counter[dest]);
+			EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, &enc_iv[dest][0]);
+			EVP_EncryptUpdate(ctx_enc, &pre_calculator[dest][pre_fin], &len, p, segments);
+			iv_counter[dest] += (segments-1)/16+1;
+		}
+		rmd=66560-pre_start[dest];
+		enc_start = pre_start[dest];
+		for(i=0; i< rmd; i++){
+        	Iciphertext[isendCounter][i] = (unsigned char )(pre_calculator[dest][enc_start+i] ^ *((unsigned char *)(buf+i)));
+	    	
+		}
+		//Cycle start
+		printf("\n[ISEND Cycle start ISEND]: iv_counter=%d, rmd=%d\n",iv_counter[dest],rmd);
+		memcpy(&enc_iv[dest][0],&IV[dest][0],16);
+		IV_Count(&enc_iv[dest][0],iv_counter[dest]);
+		segments =((blocktype_send-rmd-1)/16)*16+16;
+		
+		EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, &enc_iv[dest][0]);
+		EVP_EncryptUpdate(ctx_enc, &pre_calculator[dest][0], &len, p, segments);
+		iv_counter[dest] += (segments/16); 
+		pre_end[dest] = segments;
+		for(i=0; i< blocktype_send-rmd; i++){
+        	Iciphertext[isendCounter][rmd+i] = (unsigned char )(pre_calculator[dest][i] ^ *((unsigned char *)(buf+rmd+i)));
+	    }
+		pre_start[dest] = blocktype_send-rmd;
+		printf("\n[ISEND]:Enc_Start=%d ,Enc_End=%d Enc_Counter=%d\n",pre_start[dest], pre_end[dest],iv_counter[dest]);
+		mpi_errno=MPI_Isend(&Iciphertext[isendCounter][0],blocktype_send, MPI_CHAR, dest, tag, comm, &req);
+		
+	}else if(blocktype_send > amount){
+		//Generate more pre-ctr blocks
+		memcpy(&enc_iv[dest][0],&IV[dest][0],16);
+		IV_Count(&enc_iv[dest][0],iv_counter[dest]);
+		segments =((blocktype_send-amount-1)/16)*16+16;
+		pre_fin = pre_end[dest]; 
+		EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, &enc_iv[dest][0]);
+		EVP_EncryptUpdate(ctx_enc, &pre_calculator[dest][pre_fin], &len, p, segments); 
+		iv_counter[dest] += (segments/16); //upper integer
+		pre_end[dest] += segments ;
+		//Encryption
+   		if (first_flag[dest] ==1){
+	   		memcpy(&Iciphertext[isendCounter][0],&IV[dest][0],16);
+			printf("\n[ISEND]:Enc_Start=%d ,Enc_End=%d Enc_Counter=%d\n",pre_start[dest], pre_end[dest],iv_counter[dest]);
+	  	    for(i=0; i< blocktype_send; i++){
+		  			Iciphertext[isendCounter][i+16] = (unsigned char )(pre_calculator[dest][i] ^ *((unsigned char *)(buf+i)));
+	  		}
+	   		first_flag[dest] =0;
+	   		pre_start[dest] +=blocktype_send;
+			
+	   
+	   		mpi_errno=MPI_Isend(&Iciphertext[isendCounter][0],blocktype_send+16, MPI_CHAR, dest, tag, comm, &req);
+		}else{
+			printf("\n[ISEND]:Enc_Start=%d ,Enc_End=%d Enc_Counter=%d\n",pre_start[dest], pre_end[dest],iv_counter[dest]);
+			for(i=0; i< blocktype_send; i++){
+			enc_start = pre_start[dest];
+        	Iciphertext[isendCounter][i] = (unsigned char )(pre_calculator[dest][enc_start+i] ^ *((unsigned char *)(buf+i)));
+	   		}
+			pre_start[dest] +=blocktype_send;
+			
+			mpi_errno=MPI_Isend(&Iciphertext[isendCounter][0],blocktype_send, MPI_CHAR, dest, tag, comm, &req);
+		}			
+	}else{
+		   //Encryption
+   			if (first_flag[dest] ==1){
+	   			memcpy(&Iciphertext[isendCounter][0],&IV[dest][0],16);
+				printf("\n[ISEND]:Enc_Start=%d ,Enc_End=%d Enc_Counter=%d\n",pre_start[dest], pre_end[dest],iv_counter[dest]);
+	  	    	for(i=0; i< blocktype_send; i++){
+		  			 Iciphertext[isendCounter][i+16] = (unsigned char )(pre_calculator[dest][i] ^ *((unsigned char *)(buf+i)));
+	  			 }
+	   			first_flag[dest] =0;
+	   			pre_start[dest] +=blocktype_send;
+	   
+	   			mpi_errno=MPI_Isend(&Iciphertext[isendCounter][0],blocktype_send+16, MPI_CHAR, dest, tag, comm, &req);
+			}else{
+				printf("\n[ISEND]:Enc_Start=%d ,Enc_End=%d Enc_Counter=%d\n",pre_start[dest], pre_end[dest],iv_counter[dest]);
+				for(i=0; i< blocktype_send; i++){
+				enc_start = pre_start[dest];
+        		Iciphertext[isendCounter][i] = (unsigned char )(pre_calculator[dest][enc_start+i] ^ *((unsigned char *)(buf+i)));
+	   		 }
+			pre_start[dest] +=blocktype_send;
+			
+			mpi_errno=MPI_Isend(&Iciphertext[isendCounter][0],blocktype_send, MPI_CHAR, dest, tag, comm, &req);
+			}
+	
+	}
+	* request = req;
+	isendCounter++;
+	if(isendCounter == (500-1))
+       	isendCounter=0;
+	return mpi_errno;
+}
+/* End of adding */

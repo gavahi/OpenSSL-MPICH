@@ -10,7 +10,7 @@ unsigned char ciphertext_recv[4194304+400];
 int outlen_dec;
 int outlen_dec_org;
 EVP_CIPHER_CTX *ctx_dec;
-unsigned char Recv_IV[1024][16],dec_iv[1024][16], dec_calculator[1024][8000];
+unsigned char Recv_IV[1024][16],dec_iv[1024][16], dec_calculator[1024][66560];
 
 int dec_start[1024], dec_end[1024],dec_flag[1024],dec_amount;
 int dec_counter[1024];
@@ -494,8 +494,8 @@ int MPI_PreCtr_Recv(void *buf, int count, MPI_Datatype datatype, int source, int
 	MPI_Type_size(datatype, &recvtype_sz);
 	unsigned long long blocktype_recv= (unsigned long long) recvtype_sz*count;
 	
-	if (blocktype_recv > 8000){
-			printf("\nError: message size must < 8 K !!!\n");
+	if (blocktype_recv > 8192){
+			printf("\nError: message size must < 8K!!!\n");
 			return 1;
 	}
 	int mpi_errno = MPI_SUCCESS;
@@ -528,16 +528,18 @@ int MPI_PreCtr_Recv(void *buf, int count, MPI_Datatype datatype, int source, int
 	   dec_start[source] = blocktype_recv;
 
 	}else{
-		dec_end[source] = (16*dec_counter[source])%8000;
+		dec_end[source] = (16*dec_counter[source])%66560;
 		dec_amount= dec_end[source] - dec_start[source];
 
-		if (blocktype_recv >= 8000-dec_start[source]){
+		if (blocktype_recv >= 66560-dec_start[source]){
 			//Restart from beginning && Make sure dec_end Always= 16*N
 			memcpy(&dec_iv[source][0],&Recv_IV[source][0],16);
+			dec_counter[source] = ((dec_counter[source]-1)/4160)*4160+4160;
 		    IV_Count(&dec_iv[source][0],dec_counter[source]);
 			segments=((blocktype_recv-1)/16)*16+16;	//upper integer
 			EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, &dec_iv[source][0]);
 			EVP_EncryptUpdate(ctx_enc, &dec_calculator[source][0], &len, p, segments);
+			
 			dec_counter[source] += (segments/16);
 			dec_start[source] = 0;
 			dec_end[source]= segments;
@@ -564,26 +566,26 @@ int MPI_PreCtr_Recv(void *buf, int count, MPI_Datatype datatype, int source, int
 	}
 
 	dec_amount= dec_end[source] - dec_start[source];
-	if(dec_amount<128 && dec_start[source] <4000){
+	if(dec_amount<128){
 		memcpy(&dec_iv[source][0],&Recv_IV[source][0],16);
-		IV_Count(&dec_iv[source][0],dec_counter[source]);
-		if(dec_end[source]+128>8000){
+		
+		if(dec_end[source]>66432){
 			//Restart from beginning
+			dec_counter[source] = ((dec_counter[source]-1)/4160)*4160+4160;
+			IV_Count(&dec_iv[source][0],dec_counter[source]);
 			EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, &dec_iv[source][0]);
 			EVP_EncryptUpdate(ctx_enc, &dec_calculator[source][0], &len, p, 1024);
+			
 			dec_counter[source] += 64;
 			dec_start[source] = 0;
-		}else{
+		}else {
+			IV_Count(&dec_iv[source][0],dec_counter[source]);
 			dec_fin = dec_end[source];
 			EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, &dec_iv[source][0]);
 			EVP_EncryptUpdate(ctx_enc, &dec_calculator[source][dec_fin], &len, p, 128);
 			dec_counter[source] += 8;
 
-			//printf("\n DEC! dec_calculator: %c %c %c %c %c %c %c %c  \n",
-            //dec_calculator[0][dec_end], dec_calculator[0][dec_end+1], dec_calculator[0][dec_end+2], dec_calculator[0][dec_end+4],
-            //dec_calculator[0][dec_end+5], dec_calculator[0][dec_end+6], dec_calculator[0][dec_end+7], dec_calculator[0][dec_end+8]);
-
-			dec_end[source] = (16*dec_counter[source])%8000;
+			dec_end[source] = (16*dec_counter[source])%66560;
 		}
 	}    
 

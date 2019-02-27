@@ -6,10 +6,14 @@
  */
 
 #include "mpiimpl.h"
-unsigned char Ideciphertext[3000][1100000];
+unsigned char Ideciphertext[500][1100000];
 unsigned char * bufptr[100000];
 int reqCounter = 0;
-// end
+unsigned char ciphertext_recv[4194304+400];
+// Pre-CTR
+int dec_source[1024],prec_counter;
+prec_counter=0;
+
 
 /* -- Begin Profiling Symbol Block for routine MPI_Irecv */
 #if defined(HAVE_PRAGMA_WEAK)
@@ -190,7 +194,7 @@ int MPI_SEC_Irecv(void *buf, int count, MPI_Datatype datatype, int source, int t
     * request = req;
     bufptr[reqCounter]=buf;
     reqCounter++;
-    if(reqCounter == (3000-1))
+    if(reqCounter == (500-1))
         reqCounter=0;
 
 #if 0
@@ -211,3 +215,46 @@ return mpi_errno;
 
 }
 /*End of add, abu naser */
+
+
+/* This implementation is for Pre-CTR Mode */
+int MPI_PreCtr_Irecv(void *buf, int count, MPI_Datatype datatype, int source, int tag, MPI_Comm comm,
+                     MPI_Request *request)
+{    
+	
+	int i,len;
+	int recvtype_sz;
+	MPI_Type_size(datatype, &recvtype_sz);
+	unsigned long long blocktype_recv= (unsigned long long) recvtype_sz*count;
+    MPI_Request req; 
+
+    dec_source[prec_counter]= source;
+    prec_counter++;
+    if(prec_counter==1024){
+        prec_counter=0;
+    }
+	
+	if (blocktype_recv > 8192){
+			printf("\nError: message size must < 8K!!!\n");
+			return 1;
+	}
+
+	int mpi_errno = MPI_SUCCESS;
+	
+   if (dec_flag[source]==1){
+       mpi_errno=MPI_Irecv(&Ideciphertext[reqCounter][0], blocktype_recv+16, MPI_CHAR, source, tag, comm, &req);
+       * request = req;
+
+	}else{
+       mpi_errno=MPI_Irecv(&Ideciphertext[reqCounter][0], blocktype_recv, MPI_CHAR, source, tag, comm, &req);
+        * request = req;  
+    }
+    bufptr[reqCounter]=buf;
+    reqCounter++;
+    if(reqCounter == (500-1)){
+        reqCounter=0;
+    }
+	return mpi_errno;    
+}
+/* End of adding */
+

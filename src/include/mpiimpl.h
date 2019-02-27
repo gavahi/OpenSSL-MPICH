@@ -29,7 +29,7 @@ extern int outlen_dec_org;
 extern EVP_CIPHER_CTX *ctx_enc;
 extern EVP_CIPHER_CTX *ctx_dec;
 
-extern unsigned char Ideciphertext[3000][1100000];
+extern unsigned char Ideciphertext[500][1100000];
 extern unsigned char * bufptr[100000];
 
 // to handle irecv
@@ -39,11 +39,19 @@ extern int isendCounter;
 // to generate nonce
 extern int nonceCounter; 
 
-//pre-ctr mode
-extern unsigned char p[8020],  pre_calculator[1024][8000], dec_calculator[1024][8000];
-extern unsigned char IV[1024][16],Recv_IV[1024][16];
-extern int pre_start[1024], pre_end[1024], dec_start[1024], dec_end[1024], amount, dec_amount;
+/*  pre-ctr mode */
+extern unsigned char p[8020],  pre_calculator[1024][66560], dec_calculator[1024][66560];
+extern unsigned char IV[1024][16],Recv_IV[1024][16],enc_iv[1024][16],dec_iv[1024][16];
+extern int pre_start[1024], pre_end[1024], dec_start[1024], dec_end[1024];
+extern int enc_dest[1024], dec_source[1024], amount, dec_amount;
+extern int prec_counter,psend_counter,psend_wait_counter, precv_wait_counter;
 extern int iv_counter[1024],dec_counter[1024],first_flag[1024],dec_flag[1024];
+
+/*Common Pre-CTR mode*/
+extern unsigned char C_iv[16], C_enc[16], comm_pre[10485760], comm_p[2100000];
+extern unsigned long long comm_counter, comm_start, comm_end;
+extern int commenc_flag,commdec_flag;
+
 
 
 #ifndef MPIIMPL_H_INCLUDED

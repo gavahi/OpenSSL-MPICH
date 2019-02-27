@@ -23,10 +23,12 @@ unsigned int outlen_enc;
 EVP_CIPHER_CTX *ctx_enc;
 int nonceCounter=0,amount,sct_sz,pre_next;
 //pre_start: Enc start counter; pre_end: pre-calculation end counter
-int pre_start[1024], pre_end[1024], first_flag[1024];
+int pre_start[1024], pre_end[1024], first_flag[1024],iv_counter[1024];
 const unsigned char gcm_key[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
-unsigned char send_ciphertext[4194304+400], p[8020], IV[1024][16], enc_iv[1024][16], pre_calculator[1024][8000];
-int iv_counter[1024];
+unsigned char send_ciphertext[4194304+400], p[8020], IV[1024][16], enc_iv[1024][16], pre_calculator[1024][66560];
+//Common Pre-CTR
+unsigned char C_iv[16], C_enc[16], comm_pre[10485760], comm_p[2100000];
+unsigned long long  comm_counter, comm_start, comm_end;
 
 
 /* -- Begin Profiling Symbol Block for routine MPI_Send */
@@ -433,15 +435,15 @@ void init_prectr_128(){
 	ctx_enc = EVP_CIPHER_CTX_new();
 	EVP_EncryptInit_ex(ctx_enc, EVP_aes_128_ctr(), NULL, NULL, NULL);
 
-	//pre_calculator default 1024: 64*16
+	//Generate different Pre-CTR Arrays for different receivers
 	for (i=0;i<world_size;i++){
 		if(i != rank){
 			RAND_bytes(&IV[i][0], 16);
 			EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, &IV[i][0]);
-			EVP_EncryptUpdate(ctx_enc, &pre_calculator[i][0], &len, p, 1024);
-			iv_counter[i] = 64;
+			EVP_EncryptUpdate(ctx_enc, &pre_calculator[i][0], &len, p, 20480);
+			iv_counter[i] = 1280;
 			pre_start[i] = 0;
-			pre_end[i] = 1024;
+			pre_end[i] = 20480;
 		}
 		first_flag[i] = 1;
 		dec_flag[i] =1;
@@ -451,31 +453,22 @@ void init_prectr_128(){
     return 0;
 }
 
-void init_prectr_256(){
-	int len, i, rank, world_size;
-	memset(p,0,8000);
-  	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
+void init_cpctr_128(){
+	int len;
+	memset(comm_p,0,2097202);
+	RAND_bytes(C_iv, 16);
 	ctx_enc = EVP_CIPHER_CTX_new();
-	EVP_EncryptInit_ex(ctx_enc, EVP_aes_256_ctr(), NULL, NULL, NULL);
-
-	//pre_calculator default 1024: 64*16
-	for (i=0;i<world_size;i++){
-		if (i!=rank){
-			RAND_bytes(&IV[i][0], 16);
-			EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, &IV[i][0]);
-			EVP_EncryptUpdate(ctx_enc, &pre_calculator[i][0], &len, p, 1024);
-			iv_counter[i] = 64;
-			pre_start[i] = 0;
-			pre_end[i] = 1024;
-		}
-		first_flag[i] = 1;
-		dec_flag[i] =1;
-	}
+	EVP_EncryptInit_ex(ctx_enc, EVP_aes_128_ctr(), NULL, NULL, NULL);
+	EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, C_iv);
+	EVP_EncryptUpdate(ctx_enc, comm_pre, &len, comm_p, 2097152);
+	comm_counter = 131072;
+	comm_start = 0;
+	comm_end =  2097152;
+	
 	ctx_dec = EVP_CIPHER_CTX_new();
-	EVP_DecryptInit_ex(ctx_dec, EVP_aes_256_ctr(), NULL, NULL, NULL);
-    return 0;
+	EVP_DecryptInit_ex(ctx_dec, EVP_aes_128_ctr(), NULL, NULL, NULL);
+    return;
 }
 
 //void openssl_enc_core(unsigned char * ciphertext_send, unsigned long long src,const void *sendbuf, unsigned long long dest, unsigned long long blocktype_send){
@@ -682,20 +675,23 @@ int MPI_PreCtr_Send(const void *buf, int count, MPI_Datatype datatype, int dest,
 
 	MPI_Type_size(datatype, &sendtype_sz);	
 	unsigned long long blocktype_send= (unsigned long long)sendtype_sz*count;
-	if (blocktype_send > 8000){
-			printf("\nError: message size must <= 8 K !!!\n");
+	if (blocktype_send > 8192){
+			printf("\nError: message size must <= 8K!!!\n");
 			return 1;
 	}
 	//total pre-calcu bytes
 	amount= pre_end[dest] - pre_start[dest];
 
-	if (blocktype_send >= 8000-pre_start[dest]){
+	if (blocktype_send >= 66560-pre_start[dest]){
 		memcpy(&enc_iv[dest][0],&IV[dest][0],16);
+		iv_counter[dest] = ((iv_counter[dest]-1)/4160)*4160+4160;
 		IV_Count(&enc_iv[dest][0],iv_counter[dest]);
 		//Restart from beginning && Make sure pre_end Always= 16*N
+		printf("\n [SEND] Normal Restart !!! counter=%d \n",iv_counter[dest]);
 		segments=((blocktype_send-1)/16)*16+16;	//upper integer
 		EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, &enc_iv[dest][0]);
 		EVP_EncryptUpdate(ctx_enc, &pre_calculator[dest][0], &len, p, segments);
+		
 		iv_counter[dest] += (segments/16);
 		pre_start[dest] = 0;
 		pre_end[dest] = segments;
@@ -710,7 +706,6 @@ int MPI_PreCtr_Send(const void *buf, int count, MPI_Datatype datatype, int dest,
 		iv_counter[dest] += (segments/16); //upper integer
 		pre_end[dest] += segments ;
 	}
-	
 
    //Encryption 
    if (first_flag[dest] ==1){
@@ -727,23 +722,29 @@ int MPI_PreCtr_Send(const void *buf, int count, MPI_Datatype datatype, int dest,
 			enc_start = pre_start[dest];
         	send_ciphertext[i] = (unsigned char )(pre_calculator[dest][enc_start+i] ^ *((unsigned char *)(buf+i)));
 	    }
+		printf("\n[SEND] pre_start[dest] = %d, pre_end[dest] =%d\n ",pre_start[dest] ,pre_end[dest] );
 		mpi_errno=MPI_Send(send_ciphertext,blocktype_send, MPI_CHAR, dest, tag, comm);
 		pre_start[dest] +=blocktype_send;
 	}
 	
     //Regeneration
     amount= pre_end[dest] - pre_start[dest];
-	if(amount<128 && pre_start[dest]< 4000){
+	if(amount<128){
 		memcpy(&enc_iv[dest][0],&IV[dest][0],16);
-		IV_Count(&enc_iv[dest][0],iv_counter[dest]);
-		if(pre_end[dest]+128>8000){
+		
+		if(pre_end[dest] >66432){
 			//Restart from beginning
+			printf("\n [SEND] REGEN SET Restart !!! counter=%d \n",iv_counter[dest]);
+			iv_counter[dest] = ((iv_counter[dest]-1)/4160)*4160+4160;
+			IV_Count(&enc_iv[dest][0],iv_counter[dest]);
 			EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, &enc_iv[dest][0]);
-			EVP_EncryptUpdate(ctx_enc, &pre_calculator[dest][0], &len, p, 1024);
-			iv_counter[dest] += 64;
+			EVP_EncryptUpdate(ctx_enc, &pre_calculator[dest][0], &len, p, 5120);
+			
+			iv_counter[dest] += 320;
 			pre_start[dest] = 0;
-			pre_end[dest] = 1024;
+			pre_end[dest] = 5120;
 		}else{
+			IV_Count(&enc_iv[dest][0],iv_counter[dest]);
 			EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, &enc_iv[dest][0]);
 			pre_fin = pre_end[dest];
 			EVP_EncryptUpdate(ctx_enc, &pre_calculator[dest][pre_fin], &len, p, 128);
@@ -753,7 +754,77 @@ int MPI_PreCtr_Send(const void *buf, int count, MPI_Datatype datatype, int dest,
             //pre_calculator[0][pre_end], pre_calculator[0][pre_end+1], pre_calculator[0][pre_end+2], pre_calculator[0][pre_end+4],
             //pre_calculator[0][pre_end+5], pre_calculator[0][pre_end+6], pre_calculator[0][pre_end+7], pre_calculator[0][pre_end+8]);
 
-			pre_end[dest] = (16*iv_counter[dest])%8000;
+			pre_end[dest] = (16*iv_counter[dest])%66560;
+		}
+	}	
+	return mpi_errno;
+}
+
+
+int MPI_CpCtr_Send(const void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI_Comm comm , int max_pack)
+{
+    int mpi_errno = MPI_SUCCESS;
+	int i,len,segments,sendtype_sz, iv_start;		
+
+	MPI_Type_size(datatype, &sendtype_sz);	
+	unsigned long long blocktype_send= (unsigned long long)sendtype_sz*count;
+	if (blocktype_send > 10485760){
+			printf("\nError: message size must <= 10 MB !!!\n");
+			return 1;
+	}
+	//total pre-calcu bytes
+	amount= comm_end - comm_start;
+
+	if (blocktype_send >= 10485760-comm_start){
+		memcpy(C_enc,C_iv,16);
+		IV_Count(C_enc,comm_counter);
+		//Restart from beginning && Make sure pre_end Always= 16*N
+		segments=((blocktype_send-1)/16)*16+16;	//upper integer
+		EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key,C_enc);
+		EVP_EncryptUpdate(ctx_enc, comm_pre, &len, comm_pre, segments);
+		comm_counter += (segments/16);
+		comm_start = 0;
+		comm_end = segments;
+	}else if(blocktype_send > amount){
+		//Add more pre-ctr blocks
+		memcpy(C_enc,C_iv,16);
+		IV_Count(C_enc,comm_counter);
+		segments =((blocktype_send-amount-1)/16)*16+16;
+		EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, C_enc);
+		EVP_EncryptUpdate(ctx_enc, &comm_pre[comm_end], &len, comm_pre, segments); 
+		comm_counter += (segments/16); //upper integer
+		comm_end += segments ;
+	}
+
+   //Encryption
+    iv_start = comm_counter -(comm_end -comm_start)/16; 
+	memcpy(C_enc,C_iv,16);
+	IV_Count(C_enc,iv_start);//calculate start iv 
+	memcpy(send_ciphertext,C_enc,16);
+	for(i=0; i< blocktype_send; i++){
+    	send_ciphertext[i+16] = (unsigned char )(comm_pre[comm_start + i] ^ *((unsigned char *)(buf+i)));
+	}
+	mpi_errno=MPI_Send(send_ciphertext,blocktype_send+16, MPI_CHAR, dest, tag, comm);
+	comm_start +=blocktype_send;
+
+
+    //Regeneration
+    amount= comm_end - comm_start;
+	if(amount<512000){
+		memcpy(C_enc,C_iv,16);
+		IV_Count(C_enc,comm_counter);
+		if(pre_end[dest]+512000>10485760){
+			//Restart from beginning
+			EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, C_enc);
+			EVP_EncryptUpdate(ctx_enc, comm_pre, &len, comm_p, 2097152);
+			comm_counter += 131072;
+			comm_start = 0;
+			comm_end =  2097152;
+		}else{
+			EVP_EncryptInit_ex(ctx_enc, NULL, NULL, gcm_key, C_enc);
+			EVP_EncryptUpdate(ctx_enc, comm_pre[comm_end], &len, comm_p, 512000);
+			comm_counter += 32000;
+			comm_end += 512000;
 		}
 	}	
 	return mpi_errno;
